@@ -1,14 +1,26 @@
 #!/bin/bash
 
-# Update package lists and install Squid
-sudo apt update
-sudo apt install -y squid
+# Function to uninstall Squid Proxy Server
+uninstall_squid() {
+    echo "Uninstalling Squid Proxy Server..."
+    sudo apt remove --purge -y squid
+    sudo rm -rf /etc/squid
+    sudo rm -rf /var/log/squid
+    sudo rm -rf /var/spool/squid
+    echo "Squid Proxy Server has been uninstalled."
+}
 
-# Backup original Squid configuration file
-sudo mv /etc/squid/squid.conf /etc/squid/squid.conf.bak
+# Function to install Squid Proxy Server
+install_squid() {
+    echo "Installing Squid Proxy Server..."
+    sudo apt update
+    sudo apt install -y squid apache2-utils
 
-# Create new Squid configuration file
-cat <<EOF | sudo tee /etc/squid/squid.conf
+    # Backup original Squid configuration file
+    sudo mv /etc/squid/squid.conf /etc/squid/squid.conf.bak
+
+    # Create new Squid configuration file with basic settings
+    cat <<EOF | sudo tee /etc/squid/squid.conf
 # Recommended minimum configuration:
 acl localnet src 0.0.0.1-255.255.255.255  # RFC 1122 "this" network (LAN)
 acl localnet src fe80::/10               # RFC 4291 link-local (directly plugged) machines
@@ -39,18 +51,14 @@ http_access deny manager
 http_access allow localhost
 http_access allow localnet
 
-# Allow access from your IP range
-# Example:
-# acl my_ip_range src 192.168.1.0/24
-# http_access allow my_ip_range
-
-# Customized access controls based on IP
-# Example:
-# http_access allow my_ip1
-# http_access allow my_ip2
-
-# Allow all HTTP requests
-http_access allow all
+# Customized access controls based on username
+auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwd
+auth_param basic children 5
+auth_param basic realm Squid proxy-caching web server
+auth_param basic credentialsttl 2 hours
+acl authenticated proxy_auth REQUIRED
+http_access allow authenticated
+http_access deny all
 
 # Squid port configuration
 http_port 3128
@@ -74,8 +82,49 @@ error_directory /usr/share/squid/errors/English
 deny_info ERR_ACCESS_DENIED all
 EOF
 
-# Restart Squid service to apply changes
-sudo systemctl restart squid
+    # Create Squid password file with username and password
+    sudo htpasswd -b -c /etc/squid/passwd pradip pradip123
 
-# Check Squid service status
-sudo systemctl status squid
+    # Adjust permissions for Squid password file
+    sudo chmod 600 /etc/squid/passwd
+
+    # Restart Squid service to apply changes
+    sudo systemctl restart squid
+
+    echo "Squid Proxy Server has been installed and configured."
+    echo "Username: pradip"
+    echo "Password: pradip123"
+}
+
+# Main script logic
+if [[ $EUID -ne 0 ]]; then
+    echo "This script must be run as root. Exiting..."
+    exit 1
+fi
+
+echo "Welcome to Squid Proxy Server Setup Script!"
+
+while true; do
+    echo "Select an option:"
+    echo "1. Install Squid Proxy Server"
+    echo "2. Uninstall Squid Proxy Server"
+    echo "3. Exit"
+
+    read -p "Enter your choice: " choice
+
+    case $choice in
+        1)
+            install_squid
+            ;;
+        2)
+            uninstall_squid
+            ;;
+        3)
+            echo "Exiting..."
+            exit 0
+            ;;
+        *)
+            echo "Invalid option. Please select a valid option."
+            ;;
+    esac
+done
