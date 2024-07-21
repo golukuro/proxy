@@ -1,50 +1,15 @@
 #!/bin/bash
 
-# Install Squid Proxy Server
+# Update package lists and install Squid
 echo "Installing Squid Proxy Server..."
-apt update
-apt install -y squid
+sudo apt update
+sudo apt install -y squid
 
-# Backup default Squid configuration
-cp /etc/squid/squid.conf /etc/squid/squid.conf.bak
+# Backup original Squid configuration file
+sudo mv /etc/squid/squid.conf /etc/squid/squid.conf.bak
 
-# Create a new Squid configuration
-cat <<EOF > /etc/squid/squid.conf
-# Recommended minimum configuration:
-acl manager proto cache_object
-acl localhost src 127.0.0.1/32 ::1
-acl to_localhost dst 127.0.0.0/8 0.0.0.0/32 ::1
-
-# Example rule to allow access from your local networks.
-# Adapt to list your (internal) IP networks from where browsing
-# should be allowed
-acl localnet src 192.168.0.0/24   # RFC1918 possible internal network
-acl localnet src 10.0.0.0/8       # RFC1918 possible internal network
-acl localnet src 172.16.0.0/12    # RFC1918 possible internal network
-
-acl SSL_ports port 443
-acl Safe_ports port 80          # http
-acl Safe_ports port 21          # ftp
-acl Safe_ports port 443         # https
-acl Safe_ports port 70          # gopher
-acl Safe_ports port 210         # wais
-acl Safe_ports port 1025-65535  # unregistered ports
-acl Safe_ports port 280         # http-mgmt
-acl Safe_ports port 488         # gss-http
-acl Safe_ports port 591         # filemaker
-acl Safe_ports port 777         # multiling http
-acl CONNECT method CONNECT
-
-# Deny requests to certain unsafe ports
-http_access deny !Safe_ports
-
-# Deny CONNECT to other than secure SSL ports
-http_access deny CONNECT !SSL_ports
-
-# Only allow cachemgr access from localhost
-http_access allow localhost manager
-http_access deny manager
-
+# Create a new Squid configuration file with customized settings
+sudo tee /etc/squid/squid.conf > /dev/null << 'EOF'
 # Allow access from localhost and localnet
 http_access allow localhost
 http_access allow localnet
@@ -64,9 +29,6 @@ http_access deny all
 # Squid port configuration
 http_port 3128
 
-# Uncomment and adjust the following to add a disk cache directory
-#cache_dir ufs /var/spool/squid 100 16 256
-
 # Leave coredumps in the first cache dir
 coredump_dir /var/spool/squid
 
@@ -81,16 +43,15 @@ error_directory /usr/share/squid/errors/English
 
 # Add your own customized error pages
 deny_info ERR_ACCESS_DENIED all
-
-# Start Squid Proxy Service
-service squid restart
-
 EOF
 
-# Set up basic authentication with username and password
-htpasswd -b -c /etc/squid/passwd pradip 123456
+# Set up username and password for Squid proxy
+sudo sh -c "printf 'pradip:$(openssl passwd -apr1 123456)\n' >> /etc/squid/passwd"
 
-# Restart Squid to apply changes
-service squid restart
+# Adjust permissions on Squid password file
+sudo chmod 600 /etc/squid/passwd
 
-echo "Squid proxy installation and configuration completed successfully."
+# Restart Squid service to apply changes
+sudo systemctl restart squid.service
+
+echo "Squid Proxy installation and configuration completed successfully."
